@@ -71,7 +71,6 @@ interface Contract {
   matched_keywords: string[];
 }
 
-// Helper functions
 const formatCurrency = (value: string | number): string => {
   let num = Number(value);
   if (isNaN(num)) return String(value);
@@ -87,12 +86,18 @@ const matchKeywords = (description: string, keywords: string[]): string[] => {
   return keywords.filter((kw) => desc.includes(kw.toLowerCase()));
 };
 
-const fetchContracts = async (startDate?: string, endDate?: string) => {
+const fetchContracts = async (
+  startDate?: string,
+  endDate?: string,
+  minPrice?: string,
+  maxPrice?: string
+) => {
   const finalPostings: Contract[] = [];
-  let query =
-    "SELECT * WHERE precio_base > 500000000 AND precio_base <= 20000000000 AND estado_del_procedimiento != 'Seleccionado'";
+  // Use provided min/max or fallback to defaults if missing (for legacy support)
+  const min = minPrice ?? "500000000";
+  const max = maxPrice ?? "20000000000";
+  let query = `SELECT * WHERE precio_base > ${min} AND precio_base <= ${max} AND estado_del_procedimiento != 'Seleccionado'`;
 
-  // Apply start/end date from user-selected query params
   if (startDate) query += ` AND fecha_de_publicacion_del >= '${startDate}'`;
   if (endDate) query += ` AND fecha_de_publicacion_del <= '${endDate}'`;
 
@@ -101,7 +106,6 @@ const fetchContracts = async (startDate?: string, endDate?: string) => {
     "?pageSize=1000&pageNumber=1" +
     `&query=${encodeURIComponent(query)}`;
 
-  // Always fetch fresh data (no-cache)
   const response = await fetch(url, {
     cache: "no-store",
     headers: {
@@ -122,22 +126,30 @@ const fetchContracts = async (startDate?: string, endDate?: string) => {
     }
   });
 
-  // Sort by publication date descending
   return finalPostings.sort((a, b) =>
-    b.fecha_de_publicacion_del.localeCompare(a.fecha_de_publicacion_del)
+    b.fecha_de_publicacion_del?.localeCompare(a.fecha_de_publicacion_del)
   );
 };
 
 type ContractsListProps = {
   startDate?: string;
   endDate?: string;
+  minPrice?: string;
+  maxPrice?: string;
 };
 
 export default async function ContractsList({
   startDate,
   endDate,
+  minPrice,
+  maxPrice,
 }: ContractsListProps) {
-  const contracts = await fetchContracts(startDate, endDate);
+  const contracts = await fetchContracts(
+    startDate,
+    endDate,
+    minPrice,
+    maxPrice
+  );
 
   return (
     <div className="w-full flex flex-col items-center gap-y-4">
