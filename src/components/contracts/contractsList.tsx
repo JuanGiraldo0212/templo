@@ -6,7 +6,6 @@ const keyWords: string[] = [
   "ampliación de capacidad",
   "optimización de sistemas",
   "sectorización de acueductos",
-  "suministro de equipos",
   "motobombas",
   "equipos electromecánicos",
   "bombas flotantes",
@@ -65,9 +64,8 @@ interface Contract {
   fecha_de_publicacion_del: string;
   precio_base: number;
   duracion: string;
-  urlproceso: {
-    url: string;
-  };
+  unidad_de_duracion: string;
+  urlproceso: { url: string };
   matched_keywords: string[];
 }
 
@@ -91,40 +89,52 @@ const fetchContracts = async (
   endDate?: string,
   minPrice?: string,
   maxPrice?: string
-) => {
+): Promise<Contract[]> => {
   const finalPostings: Contract[] = [];
-  // Use provided min/max or fallback to defaults if missing (for legacy support)
   const min = minPrice ?? "500000000";
   const max = maxPrice ?? "20000000000";
-  let query = `SELECT * WHERE precio_base > ${min} AND precio_base <= ${max} AND estado_del_procedimiento != 'Seleccionado'`;
+  let query = `SELECT * WHERE precio_base > ${min} AND precio_base <= ${max} AND estado_del_procedimiento != 'Seleccionado' AND estado_del_procedimiento != 'Cancelado' AND estado_del_procedimiento != 'Borrador' AND estado_del_procedimiento != 'En aprobación' AND estado_del_procedimiento != 'Aprobado' AND adjudicado != 'Si'`;
 
   if (startDate) query += ` AND fecha_de_publicacion_del >= '${startDate}'`;
   if (endDate) query += ` AND fecha_de_publicacion_del <= '${endDate}'`;
+  const pageSize = 1000;
+  let pageNumber = 1;
+  let hasMore = true;
 
-  const url =
-    "https://www.datos.gov.co/api/v3/views/p6dx-8zbt/query.json" +
-    "?pageSize=1000&pageNumber=1" +
-    `&query=${encodeURIComponent(query)}`;
+  while (hasMore) {
+    const url =
+      "https://www.datos.gov.co/api/v3/views/p6dx-8zbt/query.json" +
+      `?pageSize=${pageSize}&pageNumber=${pageNumber}` +
+      `&query=${encodeURIComponent(query)}`;
 
-  const response = await fetch(url, {
-    cache: "no-store",
-    headers: {
-      "X-App-Token": process.env.NEXT_PUBLIC_API_APP_TOKEN ?? "",
-    },
-  });
+    const response = await fetch(url, {
+      cache: "no-store",
+      headers: {
+        "X-App-Token": process.env.NEXT_PUBLIC_API_APP_TOKEN ?? "",
+      },
+    });
 
-  if (!response.ok)
-    throw new Error("Network response was not ok: " + response.statusText);
+    if (!response.ok)
+      throw new Error("Network response was not ok: " + response.statusText);
 
-  const postings = await response.json();
+    const postings = await response.json();
 
-  postings.forEach((item: Contract) => {
-    const desc = item["descripci_n_del_procedimiento"] || "";
-    const matchedKeywords = matchKeywords(desc, keyWords);
-    if (matchedKeywords.length > 0) {
-      finalPostings.push({ ...item, matched_keywords: matchedKeywords });
+    if (!Array.isArray(postings) || postings.length === 0) {
+      hasMore = false;
+      break;
     }
-  });
+
+    postings.forEach((item: Contract) => {
+      const desc = item["descripci_n_del_procedimiento"] || "";
+      const matchedKeywords = matchKeywords(desc, keyWords);
+      if (matchedKeywords.length > 0) {
+        finalPostings.push({ ...item, matched_keywords: matchedKeywords });
+      }
+    });
+
+    hasMore = postings.length === pageSize;
+    pageNumber++;
+  }
 
   return finalPostings.sort((a, b) =>
     b.fecha_de_publicacion_del?.localeCompare(a.fecha_de_publicacion_del)
@@ -138,12 +148,12 @@ type ContractsListProps = {
   maxPrice?: string;
 };
 
-export default async function ContractsList({
+const ContractsList = async ({
   startDate,
   endDate,
   minPrice,
   maxPrice,
-}: ContractsListProps) {
+}: ContractsListProps) => {
   const contracts = await fetchContracts(
     startDate,
     endDate,
@@ -172,7 +182,12 @@ export default async function ContractsList({
           <p>
             Estado: {contract.estado_del_procedimiento} - {contract.fase}
           </p>
-          <p>{`Fecha de publicacion: ${contract.fecha_de_publicacion_del}`}</p>
+          <p>{`Fecha de publicacion: ${
+            contract.fecha_de_publicacion_del ?? "N/A"
+          }`}</p>
+          <p>
+            Duracion: {contract.duracion} {contract.unidad_de_duracion}
+          </p>
           <p>Entidad: {contract.entidad}</p>
           <p>
             Ubicacion: {contract.ciudad_entidad},{" "}
@@ -183,7 +198,7 @@ export default async function ContractsList({
             {contract.descripci_n_del_procedimiento.charAt(0) +
               contract.descripci_n_del_procedimiento.toLowerCase().slice(1)}
           </p>
-          <p>Precio Base: {formatCurrency(contract.precio_base)}</p>
+          <p>Precio base: {formatCurrency(contract.precio_base)}</p>
           <a href={contract.urlproceso.url} className="text-blue-500 underline">
             Link del proceso
           </a>
@@ -191,4 +206,6 @@ export default async function ContractsList({
       ))}
     </div>
   );
-}
+};
+
+export default ContractsList;

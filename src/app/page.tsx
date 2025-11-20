@@ -1,14 +1,13 @@
-// app/page.tsx
-
 import { Suspense } from "react";
 import DataFilterBar from "@/components/filters/dataFilterBar";
 import ContractsList from "@/components/contracts/contractsList";
+import Loading from "@/components/loading";
 
-export default function Page({
+const Page = async ({
   searchParams,
 }: {
   searchParams: { [key: string]: string };
-}) {
+}) => {
   const startDate = searchParams.startDate;
   const endDate = searchParams.endDate;
 
@@ -20,7 +19,7 @@ export default function Page({
       <h1 className="text-2xl">Busqueda de procesos SECOP II</h1>
       <div className="flex flex-col items-center gap-y-4 w-full text-center">
         <DataFilterBar />
-        <Suspense fallback={<div>Cargando procesos…</div>}>
+        <Suspense fallback={<Loading />}>
           <ContractsList
             startDate={startDate}
             endDate={endDate}
@@ -31,4 +30,6 @@ export default function Page({
       </div>
     </div>
   );
-}
+};
+
+export default Page;
